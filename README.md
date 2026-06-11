@@ -106,7 +106,7 @@ edit it. Replace:
 | Field | Replace with |
 |---|---|
 | `smtp_smarthost` | your SMTP relay, e.g. `email-smtp.us-east-2.amazonaws.com:587` (SES) |
-| `smtp_from` | a verified sender (already set: `alerts@upstreamcv.com` — verify it in the relay) |
+| `smtp_from` | a verified sender (already set: `hello@upstreamcv.com` — verify that address, or the whole upstreamcv.com domain, in the relay) |
 | `smtp_auth_username` | the relay's SMTP username (inline in the yml; the repo is private) |
 | password | NOT in the yml — `smtp_auth_password_file` points at `/etc/alertmanager/secrets/smtp_password`; create it on the box: `cp alertmanager/secrets/smtp_password.example alertmanager/secrets/smtp_password` then put the real password in it (gitignored, mode 600) |
 | `receivers[0].email_configs[0].to` | already set: `elkan@upstreamcv.com` |

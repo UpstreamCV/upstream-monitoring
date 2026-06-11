@@ -6,6 +6,15 @@ policy.
 
 ---
 
+## 2026-06-11 — smtp_from: hello@upstreamcv.com
+
+**Type:** config. `alerts@upstreamcv.com` does not exist as an address;
+`hello@upstreamcv.com` is real, so bounces/replies land somewhere and
+only one already-owned address needs relay verification. README table
+updated. `amtool check-config` green.
+
+---
+
 ## 2026-06-11 — SMTP password moved to a secrets file
 
 **Type:** config. `smtp_auth_password` replaced with
