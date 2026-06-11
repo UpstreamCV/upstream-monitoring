@@ -1,0 +1,105 @@
+# Uptime Kuma (black-box monitoring + public status page), Caddy
+# (TLS-terminating reverse proxy), Prometheus (white-box metrics) and
+# Alertmanager (email alerts). Intended to run on a small Lightsail /
+# EC2 box dedicated to monitoring so it stays up when the things it
+# monitors do not.
+#
+# FU-14 / M9.2 — see upstream-streaming-server/docs/design/01-observability.md
+# and upstream-streaming-server/docs/follow-ups.md (FU-14).
+#
+# First run:
+#   bash bootstrap.sh        # installs Docker
+#   # create prometheus/secrets/api_metrics_token first — see README.md
+#   docker compose up -d
+# Then open https://status.upstreamcv.com to do Kuma's first-run wizard.
+#
+# Prometheus (:9090) and Alertmanager (:9093) bind 127.0.0.1 only and are
+# NOT routed through Caddy — operator access is via SSH tunnel (README.md).
+
+services:
+  kuma:
+    image: louislam/uptime-kuma:1
+    container_name: kuma
+    restart: unless-stopped
+    # No host port exposed; only Caddy talks to Kuma over the internal network.
+    expose:
+      - "3001"
+    volumes:
+      - kuma-data:/app/data
+    networks:
+      - kuma-net
+    healthcheck:
+      test: ["CMD", "extra/healthcheck"]
+      interval: 60s
+      timeout: 30s
+      start_period: 60s
+      retries: 5
+
+  caddy:
+    image: caddy:2-alpine
+    container_name: caddy
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"  # HTTP/3 (QUIC); requires Lightsail firewall rule for UDP 443
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data       # ACME account + Let's Encrypt certs (don't lose this)
+      - caddy-config:/config
+    networks:
+      - kuma-net
+    depends_on:
+      kuma:
+        condition: service_started
+
+  prometheus:
+    # Pinned, not :latest — Prometheus/Alertmanager config formats drift
+    # between releases, and these exact versions are what the README
+    # validation commands (promtool/amtool) were run against locally.
+    # Bump deliberately and re-run the "Validating config changes" block.
+    image: prom/prometheus:v3.12.0
+    container_name: prometheus
+    restart: unless-stopped
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.path=/prometheus"
+      - "--storage.tsdb.retention.time=30d"
+    # Loopback only: not exposed publicly and not routed through Caddy.
+    # Operator access is via SSH tunnel (see README.md).
+    ports:
+      - "127.0.0.1:9090:9090"
+    volumes:
+      - ./prometheus:/etc/prometheus
+      - prometheus-data:/prometheus
+    networks:
+      - kuma-net
+    depends_on:
+      alertmanager:
+        condition: service_started
+
+  alertmanager:
+    # Pinned for the same config-format-drift reason as prometheus above.
+    image: prom/alertmanager:v0.32.2
+    container_name: alertmanager
+    restart: unless-stopped
+    # Loopback only: not exposed publicly and not routed through Caddy.
+    # Operator access is via SSH tunnel (see README.md).
+    ports:
+      - "127.0.0.1:9093:9093"
+    volumes:
+      - ./alertmanager:/etc/alertmanager
+      - alertmanager-data:/alertmanager  # silences + notification log survive recreation
+    networks:
+      - kuma-net
+
+volumes:
+  kuma-data:
+  caddy-data:
+  caddy-config:
+  prometheus-data:
+  alertmanager-data:
+
+networks:
+  kuma-net:
+    driver: bridge

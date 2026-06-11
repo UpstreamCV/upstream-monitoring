@@ -1,0 +1,5 @@
+# The real api-server scrape token must never be committed; only the
+# .example placeholder is. (Pattern is /* rather than the bare directory:
+# git cannot re-include a file whose parent directory is excluded.)
+prometheus/secrets/*
+!prometheus/secrets/api_metrics_token.example

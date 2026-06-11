@@ -1,0 +1,161 @@
+# Alert rules for the Upstream fleet — exactly the 8 rules from
+# upstream-streaming-server/docs/design/01-observability.md §6.
+# The rule set is deliberately capped at 8 so every alert is actionable;
+# do not add a rule without removing one.
+#
+# Metric names follow doc 01 §3 (api-server /metrics) and the SLI table
+# in doc 01 §5. Several metrics ship in later milestones; those rules are
+# written now against the designed names and simply stay silent (empty
+# query result) until the producing milestone lands.
+
+groups:
+  - name: upstream-fleet
+    rules:
+      # 1. Media node down (scrape failure > 2 min) — doc 01 §6 rule 1.
+      #    The mediamtx target itself goes live with M9.1 (metrics port +
+      #    firewall hole); until then this fires as soon as Alertmanager
+      #    has a real receiver, which is the expected "wired up" signal.
+      - alert: MediaNodeDown
+        expr: up{job="mediamtx"} == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "MediaMTX on {{ $labels.instance }} not scrapable for 2m"
+          description: >-
+            Prometheus cannot scrape the MediaMTX metrics endpoint on
+            {{ $labels.instance }}. Live SRT ingest on that node may be down.
+
+      # 2. api-server down (scrape failure > 2 min) — doc 01 §6 rule 2.
+      - alert: ApiServerDown
+        expr: up{job="api-server"} == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "api-server /metrics not scrapable for 2m"
+          description: >-
+            Prometheus cannot scrape https://api.upstreamcv.com/metrics.
+            New stream starts and lifecycle webhooks are likely failing.
+
+      # 3. Stuck sessions or hookd dead-letters — doc 01 §6 rule 3: both
+      #    mean lifecycle truth was lost.
+      #    sweeper_stuck_sessions = sweeper's stuck-session gauge
+      #    (doc 04 §2 / doc 01 §5); hookd_dead_letters = hookd dead-letter
+      #    gauge (doc 03 §4, :9101/metrics).
+      #    Fires only once M10.1 (sweeper) / M11.1 (hookd) ships the metric.
+      #    The 10m `for` matches the doc's stuck-session window and also
+      #    debounces the dead-letter half.
+      - alert: LifecycleTruthLost
+        expr: sweeper_stuck_sessions > 0 or hookd_dead_letters > 0
+        for: 10m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Stuck sessions or hookd dead-letters present"
+          description: >-
+            DB session state has diverged from reality (stuck `streaming`
+            rows or dead-lettered lifecycle events). Check the sweeper /
+            hookd spool before sessions bill dead air.
+
+      # 4. Path drift > 3 for 5 min — doc 01 §6 rule 4.
+      #    reconciler_path_drift = per-node path-drift gauge
+      #    (MediaMTX paths vs DB `streaming` rows, doc 04 §3 / doc 01 §5;
+      #    SLO is abs(drift) <= 1).
+      #    Fires only once M10.2 (reconciler) ships the metric.
+      - alert: PathDriftHigh
+        expr: abs(reconciler_path_drift) > 3
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Path drift > 3 on {{ $labels.instance }}"
+          description: >-
+            MediaMTX active paths and DB streaming sessions disagree by
+            more than 3 for 5 minutes; the reconciler is not converging.
+
+      # 5. Ingest auth success < 95% over 15 min — doc 01 §6 rule 5,
+      #    from mediamtx_auth_total{decision} (doc 01 §3, ships with the
+      #    api /metrics milestone M9.3). The SLI excludes deliberate
+      #    denies; until a label distinguishes them, all denies count.
+      #    The `> 0` guard keeps the rule silent when there is no traffic.
+      - alert: IngestAuthSuccessLow
+        expr: >-
+          (
+            sum(rate(mediamtx_auth_total{decision="allow"}[15m]))
+              /
+            sum(rate(mediamtx_auth_total[15m]))
+          ) < 0.95
+          and sum(rate(mediamtx_auth_total[15m])) > 0
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "SRT ingest auth success rate below 95% (15m)"
+          description: >-
+            More than 5% of MediaMTX auth callbacks were denied over the
+            last 15 minutes. Check for token/passphrase breakage before
+            blaming cameras.
+
+      # 6. Reconnect storm: any camera > 6 starts / 10 min — doc 01 §6
+      #    rule 6 / §5 SLI (api counter, per camera).
+      #    session_starts_total{camera_id} is the designed per-camera
+      #    start counter; fires only once M9.3 ships the api /metrics
+      #    per-camera series.
+      - alert: ReconnectStorm
+        expr: max by (camera_id) (increase(session_starts_total[10m])) > 6
+        labels:
+          severity: warning
+        annotations:
+          summary: "Reconnect storm on camera {{ $labels.camera_id }}"
+          description: >-
+            A single camera started more than 6 sessions in 10 minutes —
+            an agent is flapping (network, validation loop, or crash loop).
+
+      # 7. Node headroom > 85% of budget — doc 01 §6 rule 7, against the
+      #    doc 02 §1 per-node budget (normal SLO < 70%). node_exporter
+      #    expressions; pending node_exporter install on the media nodes
+      #    (M9.2 node half).
+      - alert: NodeHeadroomHigh
+        expr: >-
+          (1 - avg by (instance) (rate(node_cpu_seconds_total{mode="idle"}[5m]))) > 0.85
+          or
+          (1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)) > 0.85
+          or
+          (node_filefd_allocated / node_filefd_maximum) > 0.85
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Node {{ $labels.instance }} above 85% of resource budget"
+          description: >-
+            CPU, memory, or file-descriptor usage has exceeded 85% of the
+            doc 02 budget for 10 minutes. Stop adding streams; check for
+            process churn (pids) before capacity panic.
+
+      # 8. Disk > 85% or TLS cert expiry < 14 days — doc 01 §6 rule 8
+      #    (monitoring-box housekeeping). Disk uses node_exporter
+      #    filesystem series (pending node_exporter on this box); cert
+      #    expiry uses probe_ssl_earliest_cert_expiry (pending a
+      #    blackbox_exporter probe job). Written now so the rule set is
+      #    complete; silent until those exporters exist.
+      - alert: DiskOrCertExpiry
+        expr: >-
+          (
+            1 - (
+              node_filesystem_avail_bytes{fstype!~"tmpfs|overlay|squashfs"}
+                /
+              node_filesystem_size_bytes{fstype!~"tmpfs|overlay|squashfs"}
+            )
+          ) > 0.85
+          or
+          (probe_ssl_earliest_cert_expiry - time()) < (14 * 24 * 3600)
+        for: 30m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Disk > 85% or a TLS cert expires in < 14 days"
+          description: >-
+            Housekeeping: a filesystem is over 85% full or a public TLS
+            certificate expires within 14 days. Clean up or check ACME
+            renewal (Caddy/Let's Encrypt).

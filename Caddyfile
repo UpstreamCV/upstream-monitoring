@@ -1,0 +1,24 @@
+# Caddy reverse proxy in front of Uptime Kuma.
+# Caddy auto-issues + auto-renews a Let's Encrypt cert as long as
+# `status.upstreamcv.com` resolves to this box and port 80/443 are open.
+
+{
+	# Email used for ACME account / cert-expiry notices. Replace before bringing up.
+	email ops@upstreamcv.com
+}
+
+status.upstreamcv.com {
+	encode gzip zstd
+
+	# Kuma uses Socket.IO (websockets) for live monitor updates; Caddy's
+	# reverse_proxy upgrades these transparently.
+	reverse_proxy kuma:3001
+
+	log {
+		output file /var/log/caddy/access.log {
+			roll_size 10mb
+			roll_keep 5
+		}
+		format json
+	}
+}

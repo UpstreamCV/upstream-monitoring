@@ -1,0 +1,28 @@
+# Alertmanager — single email receiver (solo operator, no pager), per
+# upstream-streaming-server/docs/design/01-observability.md §6.
+#
+# ALL SMTP VALUES BELOW ARE PLACEHOLDERS. The `.invalid` TLD is
+# RFC 2606-reserved and can never resolve, so this config cannot
+# accidentally send mail. Fill in real values per README.md
+# ("Alertmanager: filling in SMTP") before relying on alerts.
+
+global:
+  smtp_smarthost: "smtp.example.invalid:587"
+  smtp_from: "alertmanager@example.invalid"
+  smtp_auth_username: "REPLACE_ME_SMTP_USERNAME"
+  smtp_auth_password: "REPLACE_ME_SMTP_PASSWORD"
+  smtp_require_tls: true
+
+route:
+  receiver: operator-email
+  group_by: ["alertname"]
+  group_wait: 30s
+  group_interval: 5m
+  # Solo operator: re-send unresolved alerts every 4h, not every few minutes.
+  repeat_interval: 4h
+
+receivers:
+  - name: operator-email
+    email_configs:
+      - to: "operator@example.invalid"
+        send_resolved: true

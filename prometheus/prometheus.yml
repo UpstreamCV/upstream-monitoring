@@ -1,0 +1,63 @@
+# Prometheus scrape config for the Upstream fleet (FU-14 / M9.2).
+# Scrape topology per upstream-streaming-server/docs/design/01-observability.md §2:
+# Prometheus PULLS from this monitoring box; Uptime Kuma keeps the
+# black-box / public-status-page role.
+#
+# This file is mounted into the container at /etc/prometheus/prometheus.yml
+# (see docker-compose.yml). Relative paths below resolve against
+# /etc/prometheus inside the container.
+
+global:
+  scrape_interval: 30s
+  evaluation_interval: 30s
+
+rule_files:
+  - alerts.yml
+
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets:
+            - alertmanager:9093
+
+scrape_configs:
+  # --- Control plane: api-server /metrics (doc 01 §3, ships with M9.3) ---
+  # Bearer token gated by UPSTREAM_PROMETHEUS_AUTH_TOKEN on the api side.
+  # The credentials file is NOT committed — copy the committed
+  # secrets/api_metrics_token.example to secrets/api_metrics_token on this
+  # box and fill in the real token before `docker compose up -d` (see
+  # README.md "Secrets"). The relative path resolves to
+  # /etc/prometheus/secrets/api_metrics_token in the container.
+  - job_name: api-server
+    scheme: https
+    metrics_path: /metrics
+    authorization:
+      type: Bearer
+      credentials_file: secrets/api_metrics_token
+    static_configs:
+      - targets:
+          - api.upstreamcv.com
+
+  # --- Media node: MediaMTX metrics (doc 01 §2, ledger LG-1) ---
+  # Target is the host-published metrics port (:19998 -> container :9998).
+  # Enabled once M9.1 ships the MediaMTX metrics port + the firewall hole
+  # (monitoring-box IP only, extending firewall-restrict-readports.sh);
+  # until then this target shows as `down` in /targets.
+  - job_name: mediamtx
+    static_configs:
+      - targets:
+          - ingest.upstreamcv.com:19998
+
+  # --- Media node: node_exporter (doc 01 §2) ---
+  # Pending node_exporter install on the media node (M9.2 node half);
+  # same monitoring-box-IP-only firewall rule as :19998.
+  - job_name: node
+    static_configs:
+      - targets:
+          - ingest.upstreamcv.com:9100
+
+  # --- Prometheus self-scrape ---
+  - job_name: prometheus
+    static_configs:
+      - targets:
+          - localhost:9090
