@@ -6,6 +6,17 @@ policy.
 
 ---
 
+## 2026-06-11 — SMTP relay: Resend (matches the upstream-web waitlist)
+
+**Type:** config. `smtp_smarthost: smtp.resend.com:587`,
+`smtp_auth_username: resend`; the password file now expects a dedicated
+Resend API key (the upstream-web waitlist already sends from
+`hello@upstreamcv.com` via Resend, so domain verification/DKIM/SPF are
+in place — no Google Workspace relay setup needed). README rewritten
+accordingly. `amtool check-config` green.
+
+---
+
 ## 2026-06-11 — smtp_from: hello@upstreamcv.com
 
 **Type:** config. `alerts@upstreamcv.com` does not exist as an address;

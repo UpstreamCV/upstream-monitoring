@@ -103,13 +103,23 @@ names, otherwise the rules stay silent forever instead of firing.
 RFC 2606-reserved `.invalid` TLD, so it **cannot send anything** until you
 edit it. Replace:
 
-| Field | Replace with |
-|---|---|
-| `smtp_smarthost` | your SMTP relay, e.g. `email-smtp.us-east-2.amazonaws.com:587` (SES) |
-| `smtp_from` | a verified sender (already set: `hello@upstreamcv.com` — verify that address, or the whole upstreamcv.com domain, in the relay) |
-| `smtp_auth_username` | the relay's SMTP username (inline in the yml; the repo is private) |
-| password | NOT in the yml — `smtp_auth_password_file` points at `/etc/alertmanager/secrets/smtp_password`; create it on the box: `cp alertmanager/secrets/smtp_password.example alertmanager/secrets/smtp_password` then put the real password in it (gitignored, mode 600) |
-| `receivers[0].email_configs[0].to` | already set: `elkan@upstreamcv.com` |
+The relay is **Resend over SMTP** — the same service the upstream-web
+waitlist sends through, so `hello@upstreamcv.com` / the domain is
+already verified there. Everything is pre-filled in the yml
+(`smtp.resend.com:587`, username `resend`, from `hello@upstreamcv.com`,
+to `elkan@upstreamcv.com`). The only thing you supply is the password
+file:
+
+1. In the Resend dashboard (resend.com → API Keys) create a key named
+   `alertmanager` with "Sending access" only — a dedicated key, not the
+   web app's, so either can be rotated independently.
+2. On the box: `cp alertmanager/secrets/smtp_password.example
+   alertmanager/secrets/smtp_password`, put the API key in it
+   (`re_...`), `chmod 600` it. The file is gitignored.
+
+(Any other SMTP relay works the same way — set `smtp_smarthost` /
+`smtp_auth_username` in the yml and the password in the file. The
+sender must be verified with that relay.)
 
 Then `docker compose restart alertmanager` and send a test alert:
 

@@ -1,16 +1,18 @@
 # Alertmanager — single email receiver (solo operator, no pager), per
 # upstream-streaming-server/docs/design/01-observability.md §6.
 #
-# Recipient is real (elkan@upstreamcv.com); the SMTP SENDING values
-# below are still placeholders — the `.invalid` TLD is RFC 2606-reserved
-# and can never resolve, so this config cannot accidentally send mail
-# until you fill in a real relay per README.md ("Alertmanager: filling
-# in SMTP").
+# Sends via Resend's SMTP interface — the same service (and same
+# verified sender, hello@upstreamcv.com) the upstream-web waitlist uses,
+# so the domain's DKIM/SPF are already in place. Username is literally
+# "resend"; the password is a Resend API key, supplied via the secrets
+# file below (create a dedicated key named "alertmanager" in the Resend
+# dashboard — do not reuse the web app's key). Mail cannot send until
+# that file holds a real key.
 
 global:
-  smtp_smarthost: "smtp.example.invalid:587"
+  smtp_smarthost: "smtp.resend.com:587"
   smtp_from: "hello@upstreamcv.com"
-  smtp_auth_username: "REPLACE_ME_SMTP_USERNAME"
+  smtp_auth_username: "resend"
   # Password comes from a file so it is never committed (same pattern as
   # prometheus/secrets/). Create alertmanager/secrets/smtp_password on
   # the box from the .example.
