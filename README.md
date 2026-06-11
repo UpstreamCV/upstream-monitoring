@@ -115,7 +115,12 @@ file:
    web app's, so either can be rotated independently.
 2. On the box: `cp alertmanager/secrets/smtp_password.example
    alertmanager/secrets/smtp_password`, put the API key in it
-   (`re_...`), `chmod 600` it. The file is gitignored.
+   (`re_...`), `chmod 644` it. The file is gitignored. **644, not
+   600** — Prometheus and Alertmanager run as `nobody` inside their
+   containers and cannot read a 600 file owned by `ubuntu` (the
+   api-server scrape fails with "unable to read authorization
+   credentials" if you over-tighten this; same for the SMTP password
+   file).
 
 (Any other SMTP relay works the same way — set `smtp_smarthost` /
 `smtp_auth_username` in the yml and the password in the file. The

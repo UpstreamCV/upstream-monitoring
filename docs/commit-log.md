@@ -6,6 +6,18 @@ policy.
 
 ---
 
+## 2026-06-11 — Deployed to the status box; secrets files must be 644
+
+**Type:** docs + deploy record. Stack is live on status.upstreamcv.com
+(prometheus + alertmanager + existing kuma/caddy; api-server target
+`up`, mediamtx pending a router port-forward for 19998 + the ingest-box
+firewall run, node pending node_exporter). README corrected: secrets
+files need `chmod 644`, not 600 — the prometheus/alertmanager
+containers run as `nobody` and cannot read 600 files owned by `ubuntu`
+(observed live as "unable to read authorization credentials").
+
+---
+
 ## 2026-06-11 — SMTP relay: Resend (matches the upstream-web waitlist)
 
 **Type:** config. `smtp_smarthost: smtp.resend.com:587`,
