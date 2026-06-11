@@ -6,6 +6,15 @@ policy.
 
 ---
 
+## 2026-06-11 — Alert recipient set to elkan@upstreamcv.com
+
+**Type:** config. `alertmanager/alertmanager.yml` receiver `to:` and
+`smtp_from` set to real addresses; SMTP relay values remain `.invalid`
+placeholders (no mail can send until a real relay is configured per
+README). Validated with `amtool check-config` (v0.32.2).
+
+---
+
 ## 2026-06-11 — Initial import: Kuma/Caddy stack + Prometheus/Alertmanager (FU-14 / M9.2)
 
 **Type:** initial repo import. The directory previously lived
