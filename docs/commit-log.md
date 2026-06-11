@@ -6,6 +6,17 @@ policy.
 
 ---
 
+## 2026-06-11 — SMTP password moved to a secrets file
+
+**Type:** config. `smtp_auth_password` replaced with
+`smtp_auth_password_file: /etc/alertmanager/secrets/smtp_password`
+(mounted from `alertmanager/secrets/`, gitignored, `.example`
+committed — same pattern as the Prometheus token). README SMTP table
+updated. Validated with `amtool check-config` against the real mount
+path.
+
+---
+
 ## 2026-06-11 — Alert recipient set to elkan@upstreamcv.com
 
 **Type:** config. `alertmanager/alertmanager.yml` receiver `to:` and

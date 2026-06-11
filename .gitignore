@@ -3,3 +3,7 @@
 # git cannot re-include a file whose parent directory is excluded.)
 prometheus/secrets/*
 !prometheus/secrets/api_metrics_token.example
+
+# Same pattern for the alertmanager SMTP password.
+alertmanager/secrets/*
+!alertmanager/secrets/smtp_password.example
