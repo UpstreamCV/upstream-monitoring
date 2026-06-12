@@ -7,6 +7,21 @@
 # in doc 01 §5. Several metrics ship in later milestones; those rules are
 # written now against the designed names and simply stay silent (empty
 # query result) until the producing milestone lands.
+#
+# Empty-vector audit (all 8 rules): an expression whose *alert
+# condition* depends on a series that the bad state itself prevents
+# from existing is silently broken. Rule 5 had this bug (all-denied
+# auth -> no decision="allow" series -> empty ratio -> no alert) and
+# now guards its numerator with `or vector(0)`; see its comment.
+# The rest are safe by construction: rules 1-2 use `up`, which
+# Prometheus synthesizes for every configured scrape target even when
+# the scrape fails; rules 3, 4 and 6 alert on `> N` of a series the
+# producer emits continuously once shipped (the bad value cannot exist
+# without the series); rules 7-8 are ratios whose numerator and
+# denominator ship together from the same exporter (idle CPU mode,
+# MemAvailable/MemTotal, filefd allocated/maximum, filesystem
+# avail/size), so they cannot go half-empty. Whole-exporter absence in
+# 3-8 is the intended pre-milestone silence described above.
 
 groups:
   - name: upstream-fleet
@@ -78,15 +93,27 @@ groups:
       #    from mediamtx_auth_total{decision} (doc 01 §3, ships with the
       #    api /metrics milestone M9.3). The SLI excludes deliberate
       #    denies; until a label distinguishes them, all denies count.
-      #    The `> 0` guard keeps the rule silent when there is no traffic.
+      #
+      #    Empty-vector handling: sum() over a selector that matches no
+      #    series returns an *empty* result, and arithmetic with an
+      #    empty operand is also empty. If every callback is denied, the
+      #    decision="allow" series may never have been created, so the
+      #    naive allow/total ratio evaluated to empty and the alert
+      #    stayed silent — the worst case (0% success) was exactly the
+      #    silent one. `or vector(0)` substitutes 0 for the missing
+      #    numerator, so all-denied evaluates to 0/total = 0 < 0.95 and
+      #    fires. No-traffic silence still holds without an explicit
+      #    `> 0` guard: with no auth series at all the *denominator* is
+      #    empty, and vector(0) / <empty> is empty, so the rule stays
+      #    silent until M9.3 ships the metric or when there is simply
+      #    no traffic in the window.
       - alert: IngestAuthSuccessLow
         expr: >-
           (
-            sum(rate(mediamtx_auth_total{decision="allow"}[15m]))
+            (sum(rate(mediamtx_auth_total{decision="allow"}[15m])) or vector(0))
               /
             sum(rate(mediamtx_auth_total[15m]))
           ) < 0.95
-          and sum(rate(mediamtx_auth_total[15m])) > 0
         for: 5m
         labels:
           severity: warning

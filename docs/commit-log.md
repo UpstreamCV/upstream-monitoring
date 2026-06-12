@@ -6,6 +6,35 @@ policy.
 
 ---
 
+## 2026-06-11 — IngestAuthSuccessLow fires on all-denied; README umask/644 consistency
+
+**Type:** config + docs. Rule 5's success ratio was empty — and
+therefore silent — whenever the `decision="allow"` series had never
+been created, i.e. exactly the all-denied worst case (`sum()` over a
+no-match selector returns empty, and arithmetic with an empty operand
+is empty). The numerator is now `(sum(rate(...{decision="allow"}[15m]))
+or vector(0))`, so all-denied evaluates to 0/total = 0 < 0.95 and
+fires; no-traffic stays silent because the *denominator* is then empty
+and `vector(0) / <empty>` is empty — which also made the old
+`and sum(...) > 0` guard redundant (removed). Audited the other 7
+rules for the same empty-vector class: none affected (rules 1–2 use
+`up`, synthesized for every configured target even on failed scrapes;
+rules 3/4/6 alert on `> N` of series their producers emit continuously
+once shipped, so the bad value cannot exist without the series; rules
+7–8 are ratios whose operands ship together from the same exporter).
+Audit reasoning recorded in the `alerts.yml` header; still exactly
+8 rules. README: the Prometheus-token instructions opened with
+`umask 077` (producing 600 files) while the SMTP-password section
+requires 644 because the containers run as `nobody`; the token block
+now uses an explicit `chmod 644` after create, drops the umask line,
+and explains why a restrictive umask must not be used. Validated:
+`promtool check rules` (SUCCESS, 8 rules), `promtool check config`,
+`amtool check-config` (v0.32.2), plus a `promtool test rules` unit
+test of the new expression (all-denied fires; no-traffic and
+100%-allow stay silent).
+
+---
+
 ## 2026-06-11 — Deployed to the status box; secrets files must be 644
 
 **Type:** docs + deploy record. Stack is live on status.upstreamcv.com

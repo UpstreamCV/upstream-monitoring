@@ -41,11 +41,19 @@ gitignored and is **not** in the repo; what ships is
 On the box, copy the example and fill in the real token:
 
 ```bash
-umask 077
 cp prometheus/secrets/api_metrics_token.example prometheus/secrets/api_metrics_token
 printf '%s' '<the real token>' > prometheus/secrets/api_metrics_token
+chmod 644 prometheus/secrets/api_metrics_token
 docker compose restart prometheus   # only needed if already running
 ```
+
+The explicit `chmod 644` matters (and a restrictive `umask` such as 077
+must **not** be used when creating it): Prometheus runs as `nobody`
+inside its container and cannot read a 600 file owned by `ubuntu` — the
+scrape fails with "unable to read authorization credentials". 644 is
+fine here because the box itself is single-operator and the token's
+only power is reading `/metrics`. Same rule for the Alertmanager SMTP
+password file below.
 
 Never commit the real token, paste it into a compose file, or echo it into
 logs. Everything under `prometheus/secrets/` except the `.example` file is
